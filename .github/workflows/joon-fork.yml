@@ -1,0 +1,50 @@
+name: Joon fork validation
+on:
+  pull_request:
+    branches: [joon/stable]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: joon-fork-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    if: github.repository == 'joon-ai/paperclip'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [avatar, typecheck, regression, build]
+    env:
+      PAPERCLIP_TELEMETRY_ENABLED: 'false'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.22.0'
+          package-manager-cache: false
+      - name: Use pinned package manager
+        run: npm install --global pnpm@9.15.4
+      - name: Resolve the release lockfile and install
+        run: |
+          pnpm install --resolution-only --ignore-scripts --no-frozen-lockfile
+          pnpm install --frozen-lockfile
+      - name: Focused avatar tests and UI tokens
+        if: matrix.lane == 'avatar'
+        run: |
+          pnpm check:token-gates
+          pnpm exec vitest run packages/shared/src/agent-appearance.test.ts packages/shared/src/validators/access.test.ts server/src/__tests__/agent-avatars.test.ts server/src/__tests__/agent-persona-persistence.test.ts ui/src/components/AgentPersona.test.tsx ui/src/components/timeline/WorkTimelineChart.test.tsx ui/src/pages/AgentDetail.avatar.test.tsx
+      - name: Workspace typecheck
+        if: matrix.lane == 'typecheck'
+        run: pnpm -r typecheck
+      - name: Unit regression suite
+        if: matrix.lane == 'regression'
+        run: pnpm test:run
+      - name: Build the workspace
+        if: matrix.lane == 'build'
+        run: pnpm build
