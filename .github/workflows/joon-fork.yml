@@ -178,6 +178,8 @@ jobs:
             mode: serialized
             shard_index: 7
             shard_count: 8
+          - label: remaining-server
+            mode: extra
     name: Regression / ${{ matrix.label }}
     env:
       PAPERCLIP_TELEMETRY_ENABLED: 'false'
@@ -204,6 +206,23 @@ jobs:
           SHARD_COUNT: ${{ matrix.shard_count }}
         shell: bash
         run: |
+          if [ "$MODE" = extra ]; then
+            node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { execFileSync, spawnSync } from 'node:child_process';
+          const plan = JSON.parse(execFileSync(process.execPath, ['scripts/run-vitest-stable.mjs', '--mode', 'general', '--group', 'general-server-without-chat', '--shard-index', '0', '--shard-count', '1', '--dry-run'], {encoding:'utf8'}));
+          const covered = new Set([...plan.selectedGeneralServerSuites, ...plan.selectedSerializedSuites, 'server/src/__tests__/chat-channels.integration.test.ts']);
+          const actual = [...fs.globSync('server/src/**/*.test.ts'), ...fs.globSync('server/scripts/**/*.test.mjs')].map(file => file.split(path.sep).join('/'));
+          const missing = actual.filter(file => !covered.has(file)).sort();
+          const expected = ['server/scripts/verify-runner-vendor-dependencies.test.mjs', 'server/src/routes/setup-token-route.test.ts', 'server/src/services/openrouter-models.test.ts'];
+          if (JSON.stringify(missing) !== JSON.stringify(expected)) throw Error('Upstream partition coverage changed: '+JSON.stringify(missing));
+          console.log('Full server coverage:', actual.length, 'files; explicit complement:', missing.length);
+          const result = spawnSync('pnpm', ['exec', 'vitest', 'run', '--project', '@paperclipai/server', '--no-file-parallelism', '--maxWorkers=1', ...missing], {stdio:'inherit',env:{...process.env,NODE_ENV:'test'}});
+          process.exit(result.status ?? 1);
+          NODE
+            exit 0
+          fi
           args=(--mode "$MODE")
           if [ -n "$GROUP" ]; then args+=(--group "$GROUP"); fi
           if [ -n "$SHARD_COUNT" ]; then args+=(--shard-index "$SHARD_INDEX" --shard-count "$SHARD_COUNT"); fi
