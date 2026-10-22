@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        lane: [avatar, typecheck, regression, build]
+        lane: [avatar, typecheck, build]
     env:
       PAPERCLIP_TELEMETRY_ENABLED: 'false'
       CI: 'true'
@@ -42,9 +42,199 @@ jobs:
       - name: Workspace typecheck
         if: matrix.lane == 'typecheck'
         run: pnpm -r typecheck
-      - name: Unit regression suite
-        if: matrix.lane == 'regression'
-        run: pnpm test:run
       - name: Build the workspace
         if: matrix.lane == 'build'
         run: pnpm build
+
+  regression_shards:
+    if: github.repository == 'joon-ai/paperclip'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix:
+        include:
+          - label: server-1
+            mode: general
+            group: general-server-without-chat
+            shard_index: 0
+            shard_count: 12
+          - label: server-2
+            mode: general
+            group: general-server-without-chat
+            shard_index: 1
+            shard_count: 12
+          - label: server-3
+            mode: general
+            group: general-server-without-chat
+            shard_index: 2
+            shard_count: 12
+          - label: server-4
+            mode: general
+            group: general-server-without-chat
+            shard_index: 3
+            shard_count: 12
+          - label: server-5
+            mode: general
+            group: general-server-without-chat
+            shard_index: 4
+            shard_count: 12
+          - label: server-6
+            mode: general
+            group: general-server-without-chat
+            shard_index: 5
+            shard_count: 12
+          - label: server-7
+            mode: general
+            group: general-server-without-chat
+            shard_index: 6
+            shard_count: 12
+          - label: server-8
+            mode: general
+            group: general-server-without-chat
+            shard_index: 7
+            shard_count: 12
+          - label: server-9
+            mode: general
+            group: general-server-without-chat
+            shard_index: 8
+            shard_count: 12
+          - label: server-10
+            mode: general
+            group: general-server-without-chat
+            shard_index: 9
+            shard_count: 12
+          - label: server-11
+            mode: general
+            group: general-server-without-chat
+            shard_index: 10
+            shard_count: 12
+          - label: server-12
+            mode: general
+            group: general-server-without-chat
+            shard_index: 11
+            shard_count: 12
+          - label: chat-1
+            mode: general
+            group: general-chat
+            shard_index: 0
+            shard_count: 3
+          - label: chat-2
+            mode: general
+            group: general-chat
+            shard_index: 1
+            shard_count: 3
+          - label: chat-3
+            mode: general
+            group: general-chat
+            shard_index: 2
+            shard_count: 3
+          - label: ui-cli-1
+            mode: general
+            group: general-workspaces-a
+            shard_index: 0
+            shard_count: 2
+          - label: ui-cli-2
+            mode: general
+            group: general-workspaces-a
+            shard_index: 1
+            shard_count: 2
+          - label: libraries
+            mode: general
+            group: general-workspaces-b
+          - label: database
+            mode: general
+            group: general-workspaces-c
+          - label: routes-1
+            mode: serialized
+            shard_index: 0
+            shard_count: 8
+          - label: routes-2
+            mode: serialized
+            shard_index: 1
+            shard_count: 8
+          - label: routes-3
+            mode: serialized
+            shard_index: 2
+            shard_count: 8
+          - label: routes-4
+            mode: serialized
+            shard_index: 3
+            shard_count: 8
+          - label: routes-5
+            mode: serialized
+            shard_index: 4
+            shard_count: 8
+          - label: routes-6
+            mode: serialized
+            shard_index: 5
+            shard_count: 8
+          - label: routes-7
+            mode: serialized
+            shard_index: 6
+            shard_count: 8
+          - label: routes-8
+            mode: serialized
+            shard_index: 7
+            shard_count: 8
+          - label: remaining-server
+            mode: extra
+    name: Regression / ${{ matrix.label }}
+    env:
+      PAPERCLIP_TELEMETRY_ENABLED: 'false'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.22.0'
+          package-manager-cache: false
+      - run: npm install --global pnpm@9.15.4
+      - name: Install and prepare upstream SDK
+        run: |
+          pnpm install --resolution-only --ignore-scripts --no-frozen-lockfile
+          pnpm install --frozen-lockfile
+          pnpm --filter @paperclipai/plugin-sdk ensure-build-deps
+      - name: Run complete upstream partition
+        env:
+          MODE: ${{ matrix.mode }}
+          GROUP: ${{ matrix.group }}
+          SHARD_INDEX: ${{ matrix.shard_index }}
+          SHARD_COUNT: ${{ matrix.shard_count }}
+        shell: bash
+        run: |
+          if [ "$MODE" = extra ]; then
+            node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { execFileSync, spawnSync } from 'node:child_process';
+          const plan = JSON.parse(execFileSync(process.execPath, ['scripts/run-vitest-stable.mjs', '--mode', 'general', '--group', 'general-server-without-chat', '--shard-index', '0', '--shard-count', '1', '--dry-run'], {encoding:'utf8'}));
+          const covered = new Set([...plan.selectedGeneralServerSuites, ...plan.selectedSerializedSuites, 'server/src/__tests__/chat-channels.integration.test.ts']);
+          const actual = [...fs.globSync('server/src/**/*.test.ts'), ...fs.globSync('server/scripts/**/*.test.mjs')].map(file => file.split(path.sep).join('/'));
+          const missing = actual.filter(file => !covered.has(file)).sort();
+          const expected = ['server/scripts/verify-runner-vendor-dependencies.test.mjs', 'server/src/routes/setup-token-route.test.ts', 'server/src/services/openrouter-models.test.ts'];
+          if (JSON.stringify(missing) !== JSON.stringify(expected)) throw Error('Upstream partition coverage changed: '+JSON.stringify(missing));
+          console.log('Full server coverage:', actual.length, 'files; explicit complement:', missing.length);
+          const result = spawnSync('pnpm', ['exec', 'vitest', 'run', '--project', '@paperclipai/server', '--no-file-parallelism', '--maxWorkers=1', ...missing], {stdio:'inherit',env:{...process.env,NODE_ENV:'test'}});
+          process.exit(result.status ?? 1);
+          NODE
+            exit 0
+          fi
+          args=(--mode "$MODE")
+          if [ -n "$GROUP" ]; then args+=(--group "$GROUP"); fi
+          if [ -n "$SHARD_COUNT" ]; then args+=(--shard-index "$SHARD_INDEX" --shard-count "$SHARD_COUNT"); fi
+          node scripts/run-vitest-stable.mjs "${args[@]}"
+  regression:
+    name: validate (regression)
+    if: always()
+    needs: regression_shards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every regression partition
+        env:
+          RESULT: ${{ needs.regression_shards.result }}
+        run: test "$RESULT" = success
