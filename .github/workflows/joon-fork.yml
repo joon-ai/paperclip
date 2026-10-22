@@ -44,7 +44,9 @@ jobs:
         run: pnpm -r typecheck
       - name: Unit regression suite
         if: matrix.lane == 'regression'
-        run: pnpm test:run
+        run: |
+          pnpm --filter @paperclipai/plugin-sdk ensure-build-deps
+          pnpm test:run
       - name: Build the workspace
         if: matrix.lane == 'build'
         run: pnpm build
