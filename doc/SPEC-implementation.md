@@ -1349,6 +1349,15 @@ Behavior:
 - non-2xx marks failed invocation
 - optional callback endpoint allows asynchronous completion updates
 
+HTTP payload mode is opt-in. Omitted `payloadMode` and `agent` preserve the
+existing agent payload. `callback_v1` sends only authoritative agent/run IDs,
+a context projection containing matching `issueId`/`taskId` strings, and
+`connectionInstructions: null`. It sends no generated runtime capabilities or
+instruction snapshot, including capabilities nested in context. Unknown modes,
+nonempty callback templates and invalid/missing/conflicting task IDs fail
+before dispatch. Configured HTTP headers and all authorization, outbound-network
+and release gates remain unchanged. No database migration is required.
+
 ## 11.4 Context Delivery
 
 - `thin`: send IDs and pointers only; agent fetches context via API
