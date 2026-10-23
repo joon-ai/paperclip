@@ -42,6 +42,7 @@ jobs:
       - name: Explicit permission denial and native database coverage
         if: matrix.lane == 'permissions'
         run: |
+          pnpm --filter @paperclipai/plugin-sdk ensure-build-deps
           pnpm --filter @paperclipai/db build
           node --input-type=module -e 'const m=await import("./packages/db/dist/test-embedded-postgres.js"); const s=await m.getEmbeddedPostgresTestSupport(); if(!s.supported) throw Error(s.reason);'
           pnpm exec vitest run server/src/__tests__/agent-default-configure-grants.test.ts server/src/__tests__/agent-permissions-service.test.ts server/src/__tests__/agent-permissions-routes.test.ts server/src/__tests__/authorization-service.test.ts server/src/__tests__/company-portability.test.ts
