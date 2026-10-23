@@ -73,3 +73,14 @@ hiring agents, before scoped-key shortcuts and grants. It preserves receipt of
 already assigned work and board authority. New standard-agent activation also
 omits incompatible assignment grants. No migration or dependency change is used.
 Keep this patch until a qualified upstream release contains equivalent behavior.
+
+## Data-only HTTP callback contract
+
+An opt-in `callback_v1` HTTP payload projects only native agent/run/task IDs and
+removes generated runtime capabilities from both payload and context. Default
+HTTP agents retain their existing payload. The source tests compare the actual
+serialized body against a credential-free consumer fixture and reject unknown
+modes or callback template injection before network dispatch. This patch adds
+no migration or dependency. It is source-only until the normal source CI,
+immutable candidate build and exact-image release approval gates pass. Do not
+activate agents or repeat hosted qualification based on unit tests alone.

@@ -5,6 +5,7 @@ import type {
 } from "../types.js";
 import { asString, parseObject } from "../utils.js";
 import { guardedHttpAdapterFetch } from "./remote-fetch.js";
+import { validateHttpPayloadConfig } from "./payload.js";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
   if (checks.some((check) => check.level === "error")) return "fail";
@@ -24,6 +25,21 @@ export async function testEnvironment(
   const config = parseObject(ctx.config);
   const urlValue = asString(config.url, "");
   const method = normalizeMethod(asString(config.method, "POST"));
+
+  try {
+    validateHttpPayloadConfig(config);
+  } catch (err) {
+    return {
+      adapterType: ctx.adapterType,
+      status: "fail",
+      checks: [{
+        code: "http_payload_config_invalid",
+        level: "error",
+        message: err instanceof Error ? err.message : "Invalid HTTP payload configuration",
+      }],
+      testedAt: new Date().toISOString(),
+    };
+  }
 
   if (!urlValue) {
     checks.push({
