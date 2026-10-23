@@ -1972,10 +1972,78 @@ describe("agent permission routes", () => {
     expect(res.body.access.taskAssignSource).toBe("simple_default");
   }, 15_000);
 
-  it("keeps task assignment enabled when agent creation privilege is enabled", async () => {
+  it("preserves membership without granting tasks:assign when a hire explicitly disables it", async () => {
+    mockAgentService.create.mockResolvedValue({
+      ...baseAgent,
+      permissions: { canCreateAgents: false, canAssignTasks: false },
+    });
+
+    const app = await createApp({
+      type: "board",
+      userId: "board-user",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+      companyIds: [companyId],
+    });
+
+    const res = await requestApp(app, (baseUrl) => request(baseUrl)
+      .post(`/api/companies/${companyId}/agent-hires`)
+      .send({
+        name: "Receiver",
+        role: "pm",
+        adapterType: "process",
+        adapterConfig: {},
+        permissions: { canAssignTasks: false },
+      }));
+
+    expect(res.status).toBe(201);
+    expect(mockAgentService.create).toHaveBeenCalledWith(
+      companyId,
+      expect.objectContaining({
+        permissions: expect.objectContaining({ canAssignTasks: false }),
+      }),
+      expect.any(Object),
+    );
+    expect(mockAccessService.ensureMembership).toHaveBeenCalledWith(
+      companyId,
+      "agent",
+      agentId,
+      "member",
+      "active",
+    );
+    expect(mockAccessService.setPrincipalPermission).toHaveBeenCalledWith(
+      companyId,
+      "agent",
+      agentId,
+      "tasks:assign",
+      false,
+      "board-user",
+    );
+  }, 15_000);
+
+
+  it.each([false, true])("reports explicit task-assignment disable despite an inherited grant: %s", async (hasGrant) => {
+    mockAgentService.getById.mockResolvedValue({
+      ...baseAgent, permissions: { canCreateAgents: false, canAssignTasks: false },
+    });
+    mockAccessService.listPrincipalGrants.mockResolvedValue(hasGrant ? [{
+      id: "grant-1", companyId, principalType: "agent", principalId: agentId,
+      permissionKey: "tasks:assign", scope: null, grantedByUserId: "board-user",
+      createdAt: new Date(), updatedAt: new Date(),
+    }] : []);
+    const app = await createApp({
+      type: "board", userId: "board-user", source: "local_implicit",
+      isInstanceAdmin: true, companyIds: [companyId],
+    });
+    const res = await requestApp(app, (baseUrl) => request(baseUrl).get(`/api/agents/${agentId}`));
+    expect(res.status).toBe(200);
+    expect(res.body.access).toMatchObject({ canAssignTasks: false, taskAssignSource: "explicit_deny" });
+  });
+
+  it("keeps explicit task assignment denial independent of agent creation privilege", async () => {
     mockAgentService.updatePermissions.mockResolvedValue({
       ...baseAgent,
-      permissions: { canCreateAgents: true },
+      permissions: { canCreateAgents: true, canAssignTasks: false },
     });
 
     const app = await createApp({
@@ -1996,11 +2064,11 @@ describe("agent permission routes", () => {
       "agent",
       agentId,
       "tasks:assign",
-      true,
+      false,
       "board-user",
     );
-    expect(res.body.access.canAssignTasks).toBe(true);
-    expect(res.body.access.taskAssignSource).toBe("agent_creator");
+    expect(res.body.access.canAssignTasks).toBe(false);
+    expect(res.body.access.taskAssignSource).toBe("explicit_deny");
   });
 
   it("preserves disabled skill creation when unrelated permission updates omit that field", async () => {

@@ -140,6 +140,32 @@ describeDatabase("new agent configuration defaults", () => {
     await db.delete(companies).where(eq(companies.id, companyId));
   });
 
+  it.each([false, true])("does not grant delegation to an explicitly disabled new agent (approval: %s)", async (requiresApproval) => {
+    const companyId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId, name: "Explicit delegation restriction",
+      issuePrefix: `DX${companyId.slice(0, 6).toUpperCase()}`,
+    });
+    const svc = agentService(db);
+    const agent = await svc.create(companyId, {
+      name: "Receiver", role: "engineer", adapterType: "process",
+      status: requiresApproval ? "pending_approval" : "idle",
+      adapterConfig: {}, runtimeConfig: {},
+      permissions: { canCreateAgents: true, canAssignTasks: false },
+    });
+    if (requiresApproval) {
+      expect((await svc.activatePendingApproval(agent.id))?.activated).toBe(true);
+    }
+    const grants = await db.select().from(principalPermissionGrants)
+      .where(eq(principalPermissionGrants.principalId, agent.id));
+    expect(grants.map((grant) => grant.permissionKey).sort()).toEqual(
+      expectedNewAgentGrantKeys.filter((key) => key !== "tasks:assign" && key !== "tasks:assign_scope"),
+    );
+    await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.companyId, companyId));
+    await db.delete(agents).where(eq(agents.companyId, companyId));
+    await db.delete(companies).where(eq(companies.id, companyId));
+  });
+
   it("keeps existing agents and their scoped grants unchanged during ordinary updates", async () => {
     const companyId = randomUUID();
     await db.insert(companies).values({

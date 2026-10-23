@@ -18,6 +18,7 @@ export const agentPermissionsSchema = z.object({
   // permissions record marks the agent low-trust) when the field is omitted.
   canCreateAgents: z.boolean().optional(),
   canCreateSkills: z.boolean().optional().default(true),
+  canAssignTasks: z.boolean().optional(),
   trustPreset: trustPresetSchema.optional(),
   authorizationPolicy: trustAuthorizationPolicySchema.optional(),
 }).catchall(z.unknown());

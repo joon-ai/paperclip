@@ -5,12 +5,23 @@ import {
   updateAgentPermissionsSchema,
 } from "@paperclipai/shared";
 import {
+  agentExplicitlyDeniesTaskAssignment,
   defaultAgentPermissions,
   normalizeAgentPermissions,
   permissionsImplyLowTrust,
 } from "../services/agent-permissions.js";
 
 describe("agent permissions service", () => {
+  it("keeps explicit assignment denial separate from hiring and legacy defaults", () => {
+    expect(agentExplicitlyDeniesTaskAssignment({ role: "engineer", permissions: { canAssignTasks: false } })).toBe(true);
+    expect(agentExplicitlyDeniesTaskAssignment({ role: "engineer", permissions: { canCreateAgents: true, canAssignTasks: false } })).toBe(true);
+    expect(agentExplicitlyDeniesTaskAssignment({ role: "ceo", permissions: { canAssignTasks: false } })).toBe(false);
+    expect(agentExplicitlyDeniesTaskAssignment({ role: "engineer", permissions: {} })).toBe(false);
+    expect(agentExplicitlyDeniesTaskAssignment({ role: "engineer", permissions: { canAssignTasks: true } })).toBe(false);
+    expect(agentPermissionsSchema.parse({ canAssignTasks: false }).canAssignTasks).toBe(false);
+    expect(agentPermissionsSchema.parse({}).canAssignTasks).toBeUndefined();
+  });
+
   it("grants agent-creation authority to new agents by default", () => {
     expect(defaultAgentPermissions({ context: "create" }).canCreateAgents).toBe(true);
     expect(normalizeAgentPermissions(undefined, { context: "create" }).canCreateAgents).toBe(true);

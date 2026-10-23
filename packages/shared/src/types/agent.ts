@@ -20,6 +20,7 @@ import type { AgentApiKeyScope } from "../validators/agent.js";
 export interface AgentPermissions extends Record<string, unknown> {
   canCreateAgents: boolean;
   canCreateSkills?: boolean;
+  canAssignTasks?: boolean;
   trustPreset?: TrustPreset;
   authorizationPolicy?: TrustAuthorizationPolicy;
 }
@@ -67,7 +68,7 @@ export interface AgentInstructionsBundle {
 
 export interface AgentAccessState {
   canAssignTasks: boolean;
-  taskAssignSource: "simple_default" | "explicit_grant" | "agent_creator" | "ceo_role" | "none";
+  taskAssignSource: "simple_default" | "explicit_permission" | "explicit_grant" | "explicit_deny" | "agent_creator" | "ceo_role" | "none";
   membership: CompanyMembership | null;
   grants: PrincipalPermissionGrant[];
 }

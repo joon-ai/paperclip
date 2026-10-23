@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        lane: [avatar, typecheck, build]
+        lane: [avatar, permissions, typecheck, build]
     env:
       PAPERCLIP_TELEMETRY_ENABLED: 'false'
       CI: 'true'
@@ -39,6 +39,13 @@ jobs:
         run: |
           pnpm check:token-gates
           pnpm exec vitest run packages/shared/src/agent-appearance.test.ts packages/shared/src/validators/access.test.ts server/src/__tests__/agent-avatars.test.ts server/src/__tests__/agent-persona-persistence.test.ts ui/src/components/AgentPersona.test.tsx ui/src/components/timeline/WorkTimelineChart.test.tsx ui/src/pages/AgentDetail.avatar.test.tsx
+      - name: Explicit permission denial and native database coverage
+        if: matrix.lane == 'permissions'
+        run: |
+          pnpm --filter @paperclipai/plugin-sdk ensure-build-deps
+          pnpm --filter @paperclipai/db build
+          node --input-type=module -e 'const m=await import("./packages/db/dist/test-embedded-postgres.js"); const s=await m.getEmbeddedPostgresTestSupport(); if(!s.supported) throw Error(s.reason);'
+          pnpm exec vitest run server/src/__tests__/agent-default-configure-grants.test.ts server/src/__tests__/agent-permissions-service.test.ts server/src/__tests__/agent-permissions-routes.test.ts server/src/__tests__/authorization-service.test.ts server/src/__tests__/company-portability.test.ts
       - name: Workspace typecheck
         if: matrix.lane == 'typecheck'
         run: pnpm -r typecheck

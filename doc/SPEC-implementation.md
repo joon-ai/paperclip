@@ -627,6 +627,16 @@ target issue must be visible to the agent and the responsible user represented
 by the run must also be authorized. In V1, issue visibility defaults to the
 whole company, so these writes are company-wide by default.
 
+Task assignment has an additional agent-level gate. For non-CEO agents, an
+explicit `permissions.canAssignTasks=false` denies `tasks:assign` before
+membership defaults, scoped-key shortcuts and broad or scoped grants. Hiring
+authority does not override an explicit denial. Membership stays active so the
+agent can receive and execute work already assigned by an authorized principal.
+Legacy records that omit the field preserve the existing simple-mode behavior.
+The CEO role keeps its existing assignment fallback. Imports and standard-agent
+activation must not issue assignment grants that conflict with the denial or
+widen a supplied scoped assignment grant into a broad grant.
+
 The shared rule does not widen low-trust, `skill_test`, or `task_bridge` key
 scopes. It also does not replace run-lifecycle controls: checkout ownership,
 active-run conflicts, status-transition validation, interaction ownership,

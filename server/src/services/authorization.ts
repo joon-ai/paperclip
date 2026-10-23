@@ -37,7 +37,7 @@ import {
   type TrustPresetResolution,
 } from "./trust-preset-resolver.js";
 import { logger } from "../middleware/logger.js";
-import { normalizeAgentPermissions } from "./agent-permissions.js";
+import { agentExplicitlyDeniesTaskAssignment, normalizeAgentPermissions } from "./agent-permissions.js";
 import { grantsForHumanRole, normalizeHumanRole } from "./company-member-roles.js";
 
 export type AuthorizationActor =
@@ -1915,6 +1915,15 @@ export function authorizationService(db: Db | DbTransaction) {
         action: input.action,
         reason: "deny_company_boundary",
         explanation: "Actor agent was not found in the target company.",
+      });
+    }
+
+    // Check before scoped-key shortcuts, trust policies, and default-open writes.
+    if (input.action === "tasks:assign" && agentExplicitlyDeniesTaskAssignment(actorAgent)) {
+      return deny({
+        action: input.action,
+        reason: "deny_policy_restricted",
+        explanation: "Task assignment is disabled on this agent by its explicit canAssignTasks permission.",
       });
     }
 
