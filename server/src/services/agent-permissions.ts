@@ -27,6 +27,15 @@ export function newStandardAgentGrantScope(
   return null;
 }
 
+/** An explicit delegation denial is independent of hiring authority. */
+export function agentExplicitlyDeniesTaskAssignment(agent: {
+  role: string;
+  permissions: Record<string, unknown> | null | undefined;
+}): boolean {
+  return agent.role.trim().toLowerCase() !== "ceo"
+    && agent.permissions?.canAssignTasks === false;
+}
+
 export type NormalizedAgentPermissions = Record<string, unknown> & {
   canCreateAgents: boolean;
   canCreateSkills: boolean;

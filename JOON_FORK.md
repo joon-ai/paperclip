@@ -60,3 +60,16 @@ same-origin asset restriction, upload/remove controls and fallback behavior.
 The patch adds no database migration or runtime dependency. Asset content stays
 behind Paperclip's existing company authorization. Removed/replaced images remain
 in asset storage, matching the upstream retention limitation.
+
+## Explicit task-assignment denial patch
+
+Adapted from Marcelo Karval's upstream PR
+https://github.com/paperclipai/paperclip/pull/12356 at immutable revision
+`9b5ef539f3ccbbd554222e0ff59e1a43e1c5ca33`.
+The pinned release has newer agent-creation defaults, so the adaptation keeps
+its create/stored permission semantics. An absent assignment flag retains the
+legacy default. Explicit false denies assignment for non-CEO agents, including
+hiring agents, before scoped-key shortcuts and grants. It preserves receipt of
+already assigned work and board authority. New standard-agent activation also
+omits incompatible assignment grants. No migration or dependency change is used.
+Keep this patch until a qualified upstream release contains equivalent behavior.
