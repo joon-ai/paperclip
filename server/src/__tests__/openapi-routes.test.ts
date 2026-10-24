@@ -237,6 +237,19 @@ function loadSpecRoutes() {
 }
 
 describe("openapi routes", () => {
+  it("documents minimal native readback as an exact task-key operation", () => {
+    const spec = buildOpenApiSpec() as any;
+    const operation = spec.paths["/api/issues/{issueId}/native-readback"].get;
+    expect(operation.security).toEqual([{ TaskKeyAuth: [] }]);
+    expect(operation["x-paperclip-authorization"]).toEqual({
+      actor: "agent", keyScope: "skill_test", taskBound: true, requiresCurrentAssignee: true,
+    });
+    const schema = operation.responses["200"].content["application/json"].schema;
+    expect(Object.keys(schema.properties).sort()).toEqual(["agent", "issue", "run"]);
+    expect(schema.properties.agent.additionalProperties).toBe(false);
+    expect(operation.responses["403"]).toBeDefined();
+  });
+
   it("documents board-only pool management with revision-checked deletion", () => {
     const { spec } = loadSpecRoutes();
     const pools = spec.paths["/api/companies/{companyId}/ai-connection-pools"];
