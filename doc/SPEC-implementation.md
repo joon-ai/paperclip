@@ -1572,6 +1572,7 @@ restores the original form and draft. Approval and permission gates are unchange
 - rate limit auth and key-management endpoints
 - strict company boundary checks on every entity fetch/mutation
 - restricted `skill_test` and `task_bridge` keys cannot enumerate company-wide run telemetry, workspace-operation logs, or the company secret catalog
+- `GET /issues/:issueId/native-readback` accepts only an exact `skill_test` agent key for its own assigned task. It reads the stored execution run and returns only task ownership/state, run identity/status, agent identity/status and blocker presence. It applies normal issue authorization and company checks. It does not return logs, provider/tool credentials, configuration or arbitrary run metadata.
 - HTTP adapters use DNS-pinned outbound requests, reject redirects and link-local/metadata targets, and require an exact server-owner origin allowlist for private destinations
 - external instruction bundle roots and exports that read them require instance-admin access; managed company-scoped bundles remain available through normal company authorization
 - agent-authenticated callers cannot persist host-executed workspace commands, and restricted keys cannot invoke preconfigured workspace runtime controls

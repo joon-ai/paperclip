@@ -84,3 +84,7 @@ modes or callback template injection before network dispatch. This patch adds
 no migration or dependency. It is source-only until the normal source CI,
 immutable candidate build and exact-image release approval gates pass. Do not
 activate agents or repeat hosted qualification based on unit tests alone.
+
+## Task-scoped native source readback
+
+The hosted worker controller requires independent current task/run/agent readback. The native-readback route accepts only an exact task-scoped agent key and the agent currently assigned to that task. It projects server-selected identity and state only. Company telemetry authorization is unchanged. No schema migration or worker execution occurs in this endpoint.

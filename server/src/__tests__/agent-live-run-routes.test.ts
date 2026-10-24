@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { type SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockAgentService = vi.hoisted(() => ({
   getById: vi.fn(),
@@ -277,6 +277,23 @@ async function requestApp(
 }
 
 describe("agent live run routes", () => {
+  // Keep cold module transformation outside the per-request assertion budget.
+  beforeAll(async () => {
+    registerModuleMocks();
+    await vi.importActual("../routes/agents.js");
+    await vi.importActual("../middleware/index.js");
+  }, 60_000);
+
+  it.each(["standard", "task_bridge", "wrong-task"])("denies native readback for %s scope at the HTTP route", async kind => {
+    const scope = kind === "wrong-task" ? { kind: "skill_test", issueId: "another-task" } : { kind };
+    const app = await createApp({}, { type: "agent", source: "agent_key", agentId: "agent-1",
+      companyId: "company-1", keyScope: scope });
+    const response = await request(app).get("/api/issues/scoped-task/native-readback");
+    expect(response.status).toBe(403);
+    expect(mockIssueService.getById).not.toHaveBeenCalled();
+    expect(mockHeartbeatService.getRun).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.resetModules();
     vi.doUnmock("../services/agents.js");

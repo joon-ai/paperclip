@@ -1263,6 +1263,7 @@ function registerCurrentRoute(input: {
 type OpenApiAuthLevel =
   | "public"
   | "agent_run"
+  | "task_key"
   | "runtime_tools"
   | "authenticated"
   | "board"
@@ -1272,6 +1273,7 @@ const BOARD_SESSION_AUTH_SCHEME = "BoardSessionAuth";
 const BOARD_API_KEY_AUTH_SCHEME = "BoardApiKeyAuth";
 const AGENT_BEARER_AUTH_SCHEME = "AgentBearerAuth";
 const AGENT_RUN_AUTH_SCHEME = "AgentRunAuth";
+const TASK_KEY_AUTH_SCHEME = "TaskKeyAuth";
 const RUNTIME_TOOLS_BEARER_AUTH_SCHEME = "RuntimeToolsBearerAuth";
 
 function securityRequirement(name: string): Record<string, string[]> {
@@ -1681,6 +1683,7 @@ function resolveOperationAuthLevel(
   path: string,
 ): OpenApiAuthLevel {
   const key = operationKey(method, path);
+  if (key === "GET /api/issues/{issueId}/native-readback") return "task_key";
   if (key === "GET /api/mcp/requests/{id}" || key === "GET /api/mcp/device") return "public";
   if (path === "/api/mcp/setup" || path === "/api/mcp/device/consent" || path.startsWith("/api/mcp/requests/") || path.startsWith("/api/mcp/connections")) return "board";
   if (PUBLIC_OPERATIONS.has(key)) return "public";
@@ -1737,6 +1740,10 @@ function applyDocumentFixups(document: any): any {
       description:
         "Scoped token bound to an active heartbeat run and presented in the Authorization bearer header. The GitHub credential endpoint requires the distinct github_credentials scope.",
     },
+    [TASK_KEY_AUTH_SCHEME]: {
+      type: "http", scheme: "bearer", bearerFormat: "Task-scoped agent API key",
+      description: "An agent API key with skill_test scope for the exact currently assigned task. Board credentials, standard keys, task-bridge keys and agent JWTs are rejected.",
+    },
     [AGENT_RUN_AUTH_SCHEME]: {
       type: "http",
       scheme: "bearer",
@@ -1753,6 +1760,8 @@ function applyDocumentFixups(document: any): any {
       const authLevel = resolveOperationAuthLevel(method, path);
       if (authLevel === "public") {
         operation.security = [];
+      } else if (authLevel === "task_key") {
+        operation.security = [securityRequirement(TASK_KEY_AUTH_SCHEME)];
       } else if (authLevel === "agent_run") {
         operation.security = [securityRequirement(AGENT_RUN_AUTH_SCHEME)];
       } else if (authLevel === "runtime_tools") {
@@ -1768,6 +1777,8 @@ function applyDocumentFixups(document: any): any {
           ? { actor: "board", instanceAdmin: true }
           : authLevel === "board"
             ? { actor: "board" }
+            : authLevel === "task_key"
+              ? { actor: "agent", keyScope: "skill_test", taskBound: true, requiresCurrentAssignee: true }
             : authLevel === "agent_run"
               ? { actor: "agent", heartbeatBound: true, taskBound: true }
             : authLevel === "runtime_tools"
@@ -6872,6 +6883,32 @@ registry.registerPath({
     401: r.unauthorized,
     403: r.forbidden,
     404: r.notFound,
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/issues/{issueId}/native-readback",
+  tags: ["runs"],
+  summary: "Get minimal native state for the caller's exact assigned task",
+  description: "Requires a skill_test API key for this issue and the current agent assignee. The server selects the stored execution run. No logs, tools, credentials or agent configuration are returned. Company telemetry permissions are unchanged.",
+  request: { params: z.object({ issueId: z.string().guid() }) },
+  responses: {
+    200: r.ok(z.object({
+      issue: z.object({
+        id: z.string().guid(), companyId: z.string().guid(), status: z.string(),
+        assigneeAgentId: z.string().guid(), assigneeUserId: z.null(),
+        executionRunId: z.string().guid(), checkoutRunId: z.string().guid().nullable(),
+        executionBlocker: z.object({ present: z.literal(true) }).strict().nullable(),
+        activeRecoveryAction: z.object({ present: z.literal(true) }).strict().nullable(),
+      }).strict(),
+      run: z.object({ id: z.string().guid(), companyId: z.string().guid(),
+        agentId: z.string().guid(), status: z.string(),
+        contextSnapshot: z.object({ taskId: z.string().guid() }).strict(),
+      }).strict(),
+      agent: z.object({ id: z.string().guid(), companyId: z.string().guid(), status: z.string() }).strict(),
+    }).strict()),
+    401: r.unauthorized, 403: r.forbidden, 404: r.notFound,
   },
 });
 
