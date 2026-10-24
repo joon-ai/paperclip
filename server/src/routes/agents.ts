@@ -1,3 +1,4 @@
+import { nativeTaskReadback } from "../services/native-task-readback.js";
 import { aiConnectionRouterService, poolMemberRuntimeConfig } from "../services/ai-connection-router.js";
 import { connectionIntentService } from "../services/connection-intents.js";
 import { completeConnectionIntentSchema } from "@paperclipai/shared";
@@ -542,6 +543,20 @@ export function agentRoutes(
   const KNOWN_INSTRUCTIONS_BUNDLE_KEY_SET: ReadonlySet<string> = new Set(KNOWN_INSTRUCTIONS_BUNDLE_KEYS);
 
   const router = Router();
+  router.get("/issues/:issueId/native-readback", async (req, res) => {
+    const result = await nativeTaskReadback({
+      actor: req.actor, issueId: req.params.issueId as string,
+      loadIssue: id => issueService(db).getById(id),
+      loadRun: id => heartbeat.getRun(id), loadAgent: id => svc.getById(id),
+      authorizeIssue: async issue => (await access.decide({ actor: req.actor, action: "issue:read",
+        resource: { type: "issue", companyId: issue.companyId, issueId: issue.id } })).allowed,
+      loadBlocker: (company, issue) => getExecutionBlocker(db, company, issue),
+      loadRecovery: (company, issue) => issueRecoveryActionService(db).getActiveForIssue(company, issue),
+    });
+    res.setHeader("Cache-Control", "no-store");
+    res.json(result);
+  });
+
   const svc = agentService(db);
   const access = accessService(db);
   const approvalsSvc = approvalService(db);

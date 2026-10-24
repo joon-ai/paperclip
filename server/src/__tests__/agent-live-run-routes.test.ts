@@ -277,6 +277,16 @@ async function requestApp(
 }
 
 describe("agent live run routes", () => {
+  it.each(["standard", "task_bridge", "wrong-task"])("denies native readback for %s scope at the HTTP route", async kind => {
+    const scope = kind === "wrong-task" ? { kind: "skill_test", issueId: "another-task" } : { kind };
+    const app = await createApp({}, { type: "agent", source: "agent_key", agentId: "agent-1",
+      companyId: "company-1", keyScope: scope });
+    const response = await request(app).get("/api/issues/scoped-task/native-readback");
+    expect(response.status).toBe(403);
+    expect(mockIssueService.getById).not.toHaveBeenCalled();
+    expect(mockHeartbeatService.getRun).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.resetModules();
     vi.doUnmock("../services/agents.js");
