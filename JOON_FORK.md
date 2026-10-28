@@ -88,3 +88,13 @@ activate agents or repeat hosted qualification based on unit tests alone.
 ## Task-scoped native source readback
 
 The hosted worker controller requires independent current task/run/agent readback. The native-readback route accepts only an exact task-scoped agent key and the agent currently assigned to that task. It projects server-selected identity and state only. Company telemetry authorization is unchanged. No schema migration or worker execution occurs in this endpoint.
+
+## HTTP adapter response deadline
+
+The HTTP adapter passes a positive configured `timeoutMs` to the guarded
+transport as its response deadline. The existing total request timer still
+applies. This prevents the transport's 30-second metadata default from ending
+a longer synchronous callback early. DNS pinning, endpoint restrictions,
+connection timeouts and unconfigured request defaults remain unchanged.
+The patch adds no migration or dependency. A new pinned image and normal
+human release approval are required before hosted qualification.
