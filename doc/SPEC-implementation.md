@@ -1349,6 +1349,12 @@ Behavior:
 - non-2xx marks failed invocation
 - optional callback endpoint allows asynchronous completion updates
 
+A positive `timeoutMs` sets the total HTTP-adapter request deadline and the
+guarded transport's response deadline. A longer configured request must not be
+cut short by the transport's default 30-second metadata deadline. Requests
+without a positive configured deadline retain that transport default. The
+connection timeout and outbound endpoint guards remain in effect.
+
 HTTP payload mode is opt-in. Omitted `payloadMode` and `agent` preserve the
 existing agent payload. `callback_v1` sends only authoritative agent/run IDs,
 a context projection containing matching `issueId`/`taskId` strings, and

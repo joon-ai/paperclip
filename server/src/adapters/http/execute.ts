@@ -21,15 +21,21 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     // before starting the remote request so dispatch gates can release without
     // waiting for the endpoint to respond.
     ctx.onDispatch?.();
-    const res = await guardedHttpAdapterFetch(url, {
-      method,
-      headers: {
-        "content-type": "application/json",
-        ...headers,
+    const res = await guardedHttpAdapterFetch(
+      url,
+      {
+        method,
+        headers: {
+          "content-type": "application/json",
+          ...headers,
+        },
+        body: JSON.stringify(body),
+        ...(timer ? { signal: controller.signal } : {}),
       },
-      body: JSON.stringify(body),
-      ...(timer ? { signal: controller.signal } : {}),
-    });
+      // The adapter owns the configured total deadline. Carry it to the
+      // pinned transport so its 30s metadata default cannot end a longer run.
+      timeoutMs > 0 ? { responseTimeoutMs: timeoutMs } : {},
+    );
 
     if (!res.ok) {
       throw new Error(`HTTP invoke failed with status ${res.status}`);
