@@ -17,6 +17,14 @@ It is not a separate agent orchestration product.
 
 ## Validation and release
 
+Automatic stranded-work recovery must preserve a pending `request_confirmation`
+with effective resolver policy `human_only` and continuation policy `none` when
+the card belongs to the exact source run. The sweep checks this before repair
+or escalation. Automatic wake admission checks it again under the issue lock.
+An explicit human message still uses the normal authorization path and does not
+resolve the separate review card. Historical and resolved cards do not hold an
+unrelated run. This guard does not grant worker or release authority.
+
 `Joon fork validation` runs focused avatar coverage, token gates, workspace
  typecheck, unit regression and a workspace build on GitHub-hosted runners.
 It has a read-only token, no deployment credentials and no agent/model keys.

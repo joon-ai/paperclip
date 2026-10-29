@@ -1,3 +1,4 @@
+import { hasPendingHumanReviewRecoveryHold } from "./human-review-recovery-hold.js";
 import { retryIdempotentDatabaseOperation } from "../database-retry.js";
 import { prepareConnectionInstructionDelivery } from "./connection-instructions.js";
 import { resolveAssignedConnectionInstructionsForRun } from "./native-runtime/assigned-mcp-tools.js";
@@ -27655,6 +27656,25 @@ export function heartbeatService(
                   idempotencyKey: opts.idempotencyKey ?? null,
                   finishedAt: new Date(),
                 });
+              return { kind: "skipped" as const };
+            }
+            // Recheck under the issue lock. Interaction creation/resolution uses
+            // the same lock, so a handoff committed after the sweep read still
+            // prevents an automatic successor. Explicit user wakes stay separate.
+            if (automaticParentRunId && await hasPendingHumanReviewRecoveryHold(
+              tx as unknown as Db,
+              { companyId: agent.companyId, issueId, agentId, sourceRunId: automaticParentRunId },
+            )) {
+              await tx.insert(agentWakeupRequests).values({
+                companyId: agent.companyId, agentId, source, triggerDetail,
+                reason: "issue_human_review_pending",
+                payload: { issueId, sourceRunId: automaticParentRunId },
+                status: "skipped",
+                requestedByActorType: "system",
+                requestedByActorId: opts.requestedByActorId ?? null,
+                idempotencyKey: opts.idempotencyKey ?? null,
+                finishedAt: new Date(),
+              });
               return { kind: "skipped" as const };
             }
           }
