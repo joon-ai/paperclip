@@ -9930,6 +9930,73 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     },
   );
 
+  it.each([false, true])("preserves a pending human-only handoff (paused=%s)", async (paused) => {
+    const { companyId, agentId, issueId, runId } = await seedStrandedIssueFixture({
+      status: "in_progress", runStatus: "succeeded",
+    });
+    if (paused) await db.update(agents).set({ status: "paused" }).where(eq(agents.id, agentId));
+    const [card] = await db.insert(issueThreadInteractions).values({
+      companyId, issueId, sourceRunId: runId,
+      kind: "request_confirmation", status: "pending",
+      effectiveResolverPolicy: "human_only", continuationPolicy: "none",
+      createdByAgentId: agentId, payload: { version: 1, prompt: "Review the result." },
+    }).returning();
+    const result = await heartbeatService(db).reconcileStrandedAssignedIssues();
+    expect(result.continuationRequeued).toBe(0);
+    expect(result.escalated).toBe(0);
+    expect(await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.agentId, agentId))).toHaveLength(1);
+    expect((await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, card.id)))[0]?.status).toBe("pending");
+    expect((await db.select().from(issues).where(eq(issues.id, issueId)))[0]?.status).toBe("in_progress");
+  });
+
+  it("rechecks a human handoff at automatic wake admission", async () => {
+    const { companyId, agentId, issueId, runId } = await seedStrandedIssueFixture({
+      status: "in_progress", runStatus: "succeeded",
+    });
+    await db.insert(issueThreadInteractions).values({
+      companyId, issueId, sourceRunId: runId,
+      kind: "request_confirmation", status: "pending",
+      effectiveResolverPolicy: "human_only", continuationPolicy: "none",
+      payload: { version: 1, prompt: "Review the result." },
+    });
+    // Call admission directly, as if a sweep read the task before the card
+    // committed. The enqueue transaction must still observe the handoff.
+    const result = await heartbeatService(db).wakeup(agentId, {
+      source: "automation", triggerDetail: "system", reason: "issue_continuation_needed",
+      requestedByActorType: "system", requestedByActorId: null,
+      payload: { issueId, retryOfRunId: runId },
+      contextSnapshot: { issueId, taskId: issueId, retryOfRunId: runId, source: "issue.continuation_recovery" },
+    });
+    expect(result).toBeNull();
+    expect(await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.agentId, agentId))).toHaveLength(1);
+    expect(await db.select().from(agentWakeupRequests).where(eq(agentWakeupRequests.reason, "issue_human_review_pending"))).toMatchObject([
+      { companyId, agentId, status: "skipped", payload: { issueId, sourceRunId: runId } },
+    ]);
+  });
+
+  it("preserves explicit human input while a non-continuing review is pending", async () => {
+    const { companyId, agentId, issueId, runId } = await seedStrandedIssueFixture({
+      status: "in_progress", runStatus: "succeeded",
+    });
+    const [card] = await db.insert(issueThreadInteractions).values({
+      companyId, issueId, sourceRunId: runId,
+      kind: "request_confirmation", status: "pending",
+      effectiveResolverPolicy: "human_only", continuationPolicy: "none",
+      payload: { version: 1, prompt: "Review the result." },
+    }).returning();
+    const [comment] = await db.insert(issueComments).values({
+      companyId, issueId, authorUserId: "responsible-user", body: "Explain the result before I decide.",
+    }).returning();
+    const heartbeat = heartbeatService(db);
+    const next = await heartbeat.wakeup(agentId, {
+      source: "automation", reason: "issue_commented", requestedByActorType: "user", requestedByActorId: "responsible-user",
+      payload: { issueId, commentId: comment.id }, contextSnapshot: { issueId, commentId: comment.id, wakeReason: "issue_commented" },
+    });
+    expect(next).not.toBeNull();
+    if (next) await waitForRunToSettle(heartbeat, next.id);
+    expect((await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, card.id)))[0]?.status).toBe("pending");
+  });
+
   it.each(["wake_assignee", "wake_assignee_on_accept"] as const)(
     "skips stranded recovery when a pending %s interaction exists",
     async (continuationPolicy) => {

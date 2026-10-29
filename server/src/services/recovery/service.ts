@@ -1,4 +1,5 @@
 import { isAiAuthenticationBlocked } from "../ai-auth-failure.js";
+import { hasPendingHumanReviewRecoveryHold } from "../human-review-recovery-hold.js";
 import { isNativeWorkspaceExportRepairCause } from "@paperclipai/shared";
 import { settleSlackConversation } from "../slack-conversation-lifecycle.js";
 import { externalConversationStateSql } from "../slack-conversation-state.js";
@@ -4446,6 +4447,17 @@ export function recoveryService(
       }
 
       let latestRun = await getLatestIssueRun(issue.companyId, issue.id);
+      // Preserve a source-bound human handoff before legacy reconciliation or
+      // paused-assignee escalation can mistake it for unfinished execution.
+      if (latestRun && await hasPendingHumanReviewRecoveryHold(db, {
+        companyId: issue.companyId,
+        issueId: issue.id,
+        agentId,
+        sourceRunId: latestRun.id,
+      })) {
+        result.skipped += 1;
+        continue;
+      }
       // A native chat can finish between the earlier settlement read and this
       // fresh run read, before its response is materialized. Its trusted
       // finalizer owns that settlement; generic productive-work recovery must
